@@ -9,9 +9,6 @@
 #import "FMDatabase.h"
 #import "FMDatabaseAdditions.h"
 #import "FMResultSet.h"
-#import "NSMutableDictionaryAdditions.h"
-#import "NSStringAdditions.h"
-#import "NSDateAdditions.h"
 
 static FMPersistenceManager *_sharedInstance;
 
@@ -483,15 +480,16 @@ static FMPersistenceManager *_sharedInstance;
         if ( keyCnt > 1 ) [stmt appendString: @" and "];
         keyCnt++;
         
-        NSString *columnKey = aKey;
+        NSString *columnKey = [aKey stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         BOOL negate = NO;
-        if ( [aKey beginsWith:@"<NOT>"] )
+        if ( [columnKey rangeOfString: @"<NOT>"].location == 0 )
         {
-            columnKey = [[aKey substringFromIndex:5] trim];
+            columnKey = [columnKey substringFromIndex:5];
+            columnKey = [columnKey stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             negate = YES;
         }
         
-        [whereValues addObject:[aDict objectForKey: aKey]];
+        [whereValues addObject:[aDict objectForKey: columnKey]];
         [stmt appendFormat: @"%@ %@ ?", [aClass columnNameForKey: columnKey], (negate ? @"!=" : @"=")];
     }
     
