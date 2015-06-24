@@ -85,6 +85,7 @@ subclass defined above.
 
 //////////////  AlbumManager.m  ////////////
 #import "AlbumManager.h"
+#import "Album.h"
 
 @interface AlbumManager ()
 {
