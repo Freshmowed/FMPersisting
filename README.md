@@ -1,9 +1,15 @@
 # FMPersisting
 Lightweight, opinionated ORM over fmdb sqlite framework
 
-This framework provides a straightforward mapping between Objective-C model classes and sqlite databases.
-It consists of just two classes: FMPersistingModel and FMPersistenceManager. FMPersistingModel can be used 
-as a superclass of "model" objects that get persisted using the fmdb sqlite framework.  In many situations, 
+This framework provides a straightforward mapping between Objective-C model classes and sqlite databases. It is
+for people that like sqlite and fmdb, and understand sql and relational database concepts. It makes development
+easier by eliminating the mental shift between classes/objects/properties and relational tables/columns. It does
+not try to hide or replace the underlying fmdb or sqlite functionality -- they are still accessible, and can be
+used without conflict. This code has been in production for several years in the iOS app, Bookmobile Audiobook and
+Podcast Player, and in several other Mac OS X and iOS projects.
+
+The framework consists of just two classes: FMPersistingModel and FMPersistenceManager. FMPersistingModel can be used 
+as a superclass of "model" objects that get persisted to a single table in sqlite.  In many situations, 
 the model subclass need only implement two methods: -tableName and -columns, which define the mapping between
 a class and table name, and properties-to-columns. The PersistenceManager class will handle table creation 
 (if necessary), and the subclass-to-db-table mapping for fetching, inserting, updating.
@@ -14,7 +20,7 @@ The framework makes extensive use of key-value coding (KVC), and by default, con
 that converts the common camelcase format of obj-c properties to the common all-caps and underscores for
 database column names.
 
-Exmple:
+# Example Class-to-Table mapping:
 <pre><code>
 //////////////  Album.h  //////////////
 #import <Foundation/Foundation.h>
@@ -60,6 +66,22 @@ Exmple:
              @"PUBLISH_DATE" : @"date",
              @"FLAGS" : @"int" };
 }
+</code></pre>
+
+That's it. There are additional options for mapping to different names, defining primary key columns, using bit-fields,
+and more, but for the most common situations, that's all you have to do.
+
+# Performing CRUD Operations
+
+Before any database operations can be performed a FMPersistenceManager instance needs to be created, 
+a database path defined, and table(s) created if necessary. After that, rows are created from attribute
+dictionaries, objects are created from database rows, and property values are accessed using KVC. A LOT
+of boilerplate database access code is eliminated.
+
+The example below is a data manager class that wraps the CRUD operations for the Album FMPersistingModel
+subclass defined above.
+
+<pre><code>
 
 //////////////  AlbumManager.m  ////////////
 #import "AlbumManager.h"
@@ -80,7 +102,7 @@ Exmple:
     if (self != nil)
     {
         self.persistenceManager = [[FMPersistenceManager alloc] init];
-        [_persistenceManager openDatabaseWithPath: @"<path to sqlite database>" ];
+        [_persistenceManager openDatabaseWithPath: @"YOUR DATABASE PATH HERE" ];
     	[_persistenceManager createTableIfNecessaryForClass:[Album class]];
     }
     return self;
