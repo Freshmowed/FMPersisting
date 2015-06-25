@@ -19,3 +19,5 @@
              @"PUBLISH_DATE" : @"date",
              @"FLAGS" : @"int" };
 }
+
+@end
