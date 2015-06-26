@@ -1,12 +1,18 @@
 # FMPersisting
-Lightweight, opinionated ORM over fmdb sqlite framework
+Lightweight, opinionated* ORM over fmdb sqlite framework
 
 This framework provides a straightforward mapping between Objective-C model classes and sqlite databases. It is
-for people that like sqlite and fmdb, and understand sql and relational database concepts. It makes development
-easier by eliminating the mental shift between classes/objects/properties and relational tables/columns. It does
-not try to hide or replace the underlying fmdb or sqlite functionality -- they are still accessible, and can be
-used without conflict. This code has been in production for several years in the iOS app, Bookmobile Audiobook and
-Podcast Player, and in several other Mac OS X and iOS projects.
+for people that like sqlite and fmdb, and understand sql and relational database concepts. 
+
+It makes development easier by eliminating the mental shift between classes/objects/properties and relational tables/columns. 
+*Why is it opinionated?
+FMPersisting does not try to hide or replace the underlying fmdb or sqlite functionality -- they are still accessible, and can be used without conflict. There is no attempt to "automatically" synchronize an object graph with the database. I've used MANY object-relational mapping frameworks extensively over my career (NeXT's DBKit and EOF, Apple's CoreData, Java Hibernate, PHP Symfony/Doctrine) and in my opinion are more trouble than they are worth for most projects. FMPersisting is simple, open, and straightforward.*
+
+This code has been in production for several years in the iOS app, Bookmobile Audiobook and Podcast Player, and in several other Mac OS X and iOS projects.
+
+*everyone's got one
+
+# Classes
 
 The framework consists of just two classes: FMPersistingModel and FMPersistenceManager. FMPersistingModel can be used 
 as a superclass of "model" objects that get persisted to a single table in sqlite.  In many situations, 
@@ -77,6 +83,10 @@ Before any database operations can be performed a FMPersistenceManager instance 
 a database path defined, and table(s) created if necessary. After that, rows are created from attribute
 dictionaries, objects are created from database rows, and property values are accessed using KVC. A LOT
 of boilerplate database access code is eliminated.
+
+There is no attempt to synchronize the database with an object graph. There are a relatively small number of
+methods available in FMPersistenceManager that you use to fetch from or modify the database. When and why this
+happens is explicitly and intentionally controlled by the overlying application.
 
 The example below is a data manager class that wraps the CRUD operations for the Album FMPersistingModel
 subclass defined above.
