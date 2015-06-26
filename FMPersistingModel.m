@@ -482,6 +482,7 @@ static NSDateFormatter *descriptionDateFormatter;
     for (NSString *columnName in columnNames)
     {
         NSString *key = [[self class] keyForColumnName: columnName];
+        if ( [key isEqualToString: [[self class] primaryKeyKey] ] ) continue;
         NSObject *value = [anotherObject valueForKey: key];
         [self setValue: value forKey: key];
     }

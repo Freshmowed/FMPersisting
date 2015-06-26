@@ -110,7 +110,7 @@
 /* Default implementation compares primaryKeyColumnName values. */
 - (BOOL)isEqual:(id)anObject;
 
-/* Sets all persisted values from anotherObject to those of receiver (using KVC). */
+/* Sets all persisted values from anotherObject to those of receiver (using KVC), except for the primary key. */
 - (void) copyValuesFrom: (FMPersistingModel *) anotherObject;
 
 /*
