@@ -1,7 +1,8 @@
 //
 //  FMPersistingModel.h
 //
-//  Copyright 2010 freshmowed software. All rights reserved.
+//  Created by Duke Browning on 10/08/2010.
+//  Copyright (c) 2009-2015 freshmowed software. See included LICENSE file.
 //
 
 #import <Foundation/Foundation.h>
