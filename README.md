@@ -59,7 +59,7 @@ database column names.
              @"LAST_PLAYED_DATE" : @"date",
              @"COVER_IMAGE_DATA" : @"data",
              @"TITLE" : @"string",
-             @"ARTIST" : @"string",
+             @"ARTIST_ID" : @"int",
              @"DESCRIP" : @"string",
              @"PUBLISH_DATE" : @"date",
              @"FLAGS" : @"int" };
@@ -68,6 +68,8 @@ database column names.
 
 That's it. There are additional options for mapping to different names, defining primary key columns, using bit-fields,
 and more, but for the most common situations, that's all you have to do.
+
+Relationships between objects/tables are managed by the direct manipulation of foreign ID properties. No magic, no object graphs. You decide what you want to cache and when.
 
 # Performing CRUD Operations
 
