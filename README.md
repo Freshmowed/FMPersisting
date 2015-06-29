@@ -92,6 +92,7 @@ subclass defined above.
 //////////////  AlbumManager.m  ////////////
 #import "AlbumManager.h"
 #import "Album.h"
+#import "Artist.h"
 
 @interface AlbumManager ()
 {
@@ -115,10 +116,10 @@ subclass defined above.
     return self;
 }
 
-- (Album *) createNewAlbumWithTitle: (NSString *) title artist: (NSString *) artist
+- (Album *) createNewAlbumWithTitle: (NSString *) title artist: (Artist *) artist
 {
     return (Album *) [self.persistenceManager insertNewObjectOfClass: [Album class]
-                                  withValues: @{@"title": title, @"artist" : artist}]; 
+                                  withValues: @{@"title": title, @"artistID" : artist.ID}]; 
 }
 
 - (Album *) fetchAlbumWithTitle: (NSString *) title
