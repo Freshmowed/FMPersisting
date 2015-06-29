@@ -1,24 +1,21 @@
 # FMPersisting
-Lightweight, opinionated* ORM over fmdb sqlite framework
 
-This framework provides a straightforward mapping between Objective-C model classes and sqlite databases. It is
-for people that like sqlite and fmdb, and understand sql and relational database concepts. 
+The simplest alternative to Core Data. There is not a faster, simpler way to persist your classes.
 
-It makes development easier by eliminating the mental shift between classes/objects/properties and relational tables/columns. 
-*Why is it opinionated?
-FMPersisting does not try to hide or replace the underlying fmdb or sqlite functionality -- they are still accessible, and can be used without conflict. There is no attempt to "automatically" synchronize an object graph with the database. I've used MANY object-relational mapping frameworks extensively over my career (NeXT's DBKit and EOF, Apple's CoreData, Java Hibernate, PHP Symfony/Doctrine) and in my opinion are more trouble than they are worth for most projects. FMPersisting is simple, open, and straightforward.*
+Lightweight, opinionated* ORM over fmdb sqlite framework by Duke Browning. I've used many object-relational mapping frameworks extensively over my career (NeXT's DBKit and EOF, Apple's CoreData, Java Hibernate, PHP Symfony/Doctrine, ...) and (IMO) are more trouble than they are worth for most projects. 
+
+FMPersisting is simple, open, and straightforward. It maps Objective-C model classes to sqlite database tables, and allows operations to be performed using objects/methods rather than sql in the vast majority of cases. It makes development easier by eliminating the mental shift between classes/objects/properties and relational tables/columns. It is
+for people that like sqlite and fmdb, and are comfortable with sql and relational database concepts. 
+
+FMPersisting does not try to hide or replace the underlying fmdb or sqlite functionality -- they are still accessible, and can be used without conflict. There is no attempt to "automatically" synchronize an object graph with the database. 
 
 This code has been in production for several years in the iOS app, Bookmobile Audiobook and Podcast Player, and in several other Mac OS X and iOS projects.
 
-*everyone's got one
+*everyone's got one.
 
-# Classes
+# FMPersisting Framework Classes
 
-The framework consists of just two classes: FMPersistingModel and FMPersistenceManager. FMPersistingModel can be used 
-as a superclass of "model" objects that get persisted to a single table in sqlite.  In many situations, 
-the model subclass need only implement two methods: -tableName and -columns, which define the mapping between
-a class and table name, and properties-to-columns. The PersistenceManager class will handle table creation 
-(if necessary), and the subclass-to-db-table mapping for fetching, inserting, updating.
+The framework consists of just two classes: FMPersistingModel and FMPersistenceManager. FMPersistingModel must be used as the superclass of "model" objects that get persisted to a single table in sqlite.  In many situations, the model subclass need only implement one method: -columns, which defines the mapping between properties and columns. The PersistenceManager class will handle table creation (if necessary), and the subclass-to-db-table mapping for fetching, inserting, updating.
 
 The FMPersistenceManager class provides all the standard CRUD operations for FMPersistingModel subclasses.
 
@@ -54,11 +51,6 @@ database column names.
 #import "Album.h"
 
 @implementation Album 
-
-+ (NSString *) tableName;
-{
-    return @"ALBUM";
-}
 
 + (NSDictionary *) columns;
 {
