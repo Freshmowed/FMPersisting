@@ -46,7 +46,9 @@ database column names.
 @property (nonatomic, retain) NSNumber *flags;
 
 @end
+</code></pre>
 
+<pre><code>
 //////////////  Album.m  /////////////
 #import "Album.h"
 
