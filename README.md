@@ -2,7 +2,7 @@
 
 The simplest alternative to Core Data. There is not a faster, simpler way to persist your classes.
 
-Lightweight, opinionated* ORM over fmdb sqlite framework by Duke Browning. I've used many object-relational mapping frameworks extensively over my career (NeXT's DBKit and EOF, Apple's CoreData, Java Hibernate, PHP Symfony/Doctrine, ...) and (IMO) are more trouble than they are worth for most projects. 
+Lightweight, opinionated* ORM over fmdb sqlite framework by Duke Browning. 
 
 FMPersisting is simple, open, and straightforward. It maps Objective-C model classes to sqlite database tables, and allows operations to be performed using objects/methods rather than sql in the vast majority of cases. It makes development easier by eliminating the mental shift between classes/objects/properties and relational tables/columns. It is
 for people that like sqlite and fmdb, and are comfortable with sql and relational database concepts. 
@@ -11,7 +11,7 @@ FMPersisting does not try to hide or replace the underlying fmdb or sqlite funct
 
 This code has been in production for several years in the iOS app, Bookmobile Audiobook and Podcast Player, and in several other Mac OS X and iOS projects.
 
-*everyone's got one.
+*everyone's got one. I've used many object-relational mapping frameworks extensively over my career (NeXT's DBKit and EOF, Apple's CoreData, Java Hibernate, PHP Symfony/Doctrine, ...) and (IMO) are more trouble than they are worth for most projects. 
 
 # FMPersisting Framework Classes
 
