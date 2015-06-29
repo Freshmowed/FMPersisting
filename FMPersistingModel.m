@@ -50,11 +50,6 @@ static NSDateFormatter *descriptionDateFormatter;
     return nil;
 }
 
-+ (NSArray *) excludedPropertyNames;
-{
-    return @[];
-}
-
 + (NSArray *) excludedColumnNames;
 {
     return nil;
@@ -698,8 +693,6 @@ static NSDateFormatter *descriptionDateFormatter;
         if (!propName) continue;
         
         NSString *propertyName = [NSString stringWithCString:propName encoding:NSUTF8StringEncoding];
-        
-        if ( [self excludedPropertyNames] && [[self excludedPropertyNames] containsObject: propertyName] ) continue;
         
         NSString *columnName = [self convertPropertyNameToColumnName: propertyName];
         NSString *propertyType = [self propertyTypeStringOfProperty:property];

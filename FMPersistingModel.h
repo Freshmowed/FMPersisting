@@ -23,28 +23,30 @@
 
 @property (assign) BOOL hasPersisted;
 
-/* These two methods should be overridden by subclasses */
+/* The default implementation un-camelcases the class name.  */
 + (NSString *) tableName;
 
-/* Should return a dictionary containing column name keys and column data type values. 
+/* ** Required **
+ * Should return a dictionary containing column name keys and column data type values.
  * Datatypes are NSStrings of ObjC primitive types, values supported are: "int", "long", long long",
  * "bool", "float", "double", "string", "date", "data", "data nocopy".
  * An appropriate sqlite datatype affinity will be used when creating the schema.
+ *
+ * A template for this method can be generated in lldb using: 'po [<subclass name> printColumnTemplate]'
  */
 + (NSDictionary *) columns;
-/* end required subclass methods */
 
 /* All of the remaining methods generally do the right thing, but can be overridden by subclasses for
  * special cases.
  */
 
 /* Subclasses may provide a list of column names that aren't automatically fetched or inserted.  This
- * might be BLOB columns that should be lazily loaded.
+ * might be BLOB columns that should be lazily loaded, or a pre-existing column not mapped to the class.
  */
 + (NSArray *) excludedColumnNames;
 
 + (NSString *) primaryKeyColumnName; // @"ID" by default
-+ (NSString *) primaryKeyKey;
++ (NSString *) primaryKeyKey;        // @"ID" if the primaryKeyColumnName is not specified.
 
 /*
  * Subclasses can define one or more properties to hold bitfields. Then the bool properties persisted

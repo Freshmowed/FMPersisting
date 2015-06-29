@@ -19,7 +19,7 @@
 @property BOOL shouldRaiseExceptions;
 @property BOOL shouldUseMainThread;
 
-/* optional singleton */
+/* optional default instance */
 + (FMPersistenceManager *) sharedInstance;
 + (void) setSharedInstance: (FMPersistenceManager *) psMgr;
 

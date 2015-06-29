@@ -46,7 +46,6 @@ static FMPersistenceManager *_sharedInstance;
     self = [super init];
     if (self != nil) 
     {
-        //_sharedInstance = self;  // set externally!
         insertHandlersByClassName = [[NSMutableDictionary alloc] init];
         deleteHandlersByClassName = [[NSMutableDictionary alloc] init];
         updateHandlersByClassName = [[NSMutableDictionary alloc] init];
@@ -249,6 +248,7 @@ static FMPersistenceManager *_sharedInstance;
     return [self updateValue: aValue forKey: aKey ofObject: anObject obeyThreadRule: YES];
 }
 
+/* obeyThreadRule parameter to be deprecated */
 - (BOOL) updateValue: (NSObject *) aValue forKey: (NSString *) aKey ofObject: (FMPersistingModel *) anObject obeyThreadRule: (BOOL) obeyThreadRule;
 {
     if ( !aValue && !aKey && !anObject )
