@@ -132,6 +132,12 @@ subclass defined above.
     return [self.persistenceManager fetchAllObjectsOfClass: [Album class] ];
 }
 
+- (NSArray *) albumsByArtist: (Artist *) artist
+{
+    return [self.persistenceManager fetchAllObjectsOfClass: [Album class] 
+                                              withCriteria: @{"artistID" : artist.ID}];
+}
+
 - (void) albumDidBeginPlaying: (Album *) album
 {
     [self.persistenceManager updateValue: [NSDate date]
