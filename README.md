@@ -40,7 +40,7 @@ database column names.
 @property (nonatomic, retain) NSData *coverImageData;
 @property (nonatomic, retain) NSNumber *mediaType;
 @property (nonatomic, retain) NSString *title;
-@property (nonatomic, retain) NSString *artist;
+@property (nonatomic, retain) NSNumber *artistID;
 @property (nonatomic, retain) NSString *descrip;
 @property (nonatomic, retain) NSString *publishDate;
 @property (nonatomic, retain) NSNumber *flags;
@@ -69,7 +69,9 @@ database column names.
 That's it. There are additional options for mapping to different names, defining primary key columns, using bit-fields,
 and more, but for the most common situations, that's all you have to do.
 
-Relationships between objects/tables are managed by the direct manipulation of foreign ID properties. No magic, no object graphs. You decide what you want to cache and when.
+Relationships between objects/tables are managed by the direct manipulation of foreign ID properties. In the example above, an Artist class would be defined and the artistID property in Album would hold the reference. No magic, no object graphs. 
+
+You decide what you want to cache and when.
 
 # Performing CRUD Operations
 
