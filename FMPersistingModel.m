@@ -5,23 +5,14 @@
 //  Copyright (c) 2009-2015 freshmowed software. See included LICENSE file.
 //
 
+#import <objc/runtime.h>
 #import "FMPersistingModel.h"
 #import "FMResultSet.h"
 
 static NSMutableDictionary *keysForColumnNamesDict;
 static NSMutableDictionary *columnNamesForKeysDict;
+static NSMutableDictionary *tableNamesByClassName;
 static NSDateFormatter *descriptionDateFormatter;
-
-@interface FMPersistingModel ()
-+ (NSDictionary *) columnDict;
-+ (NSDateFormatter *) descriptionDateFormatter;
-
-+ (NSString *) sqliteDataTypeForDataType: (NSString *) aDataType;
-
-/* This returns the method selector used to get a value from a fmdb FMResultSet. */
-+ (SEL) resultSetSelectorForColumnType: (NSString *) columnType;
-
-@end
 
 @interface FMResultSet (FMResultSetAdditions)
 
@@ -38,19 +29,35 @@ static NSDateFormatter *descriptionDateFormatter;
 
 + (NSString *) tableName;
 {
-    NSLog(@"PerisistingModel: subclass %@ of FMPersistingModel does not implement +tableName.", NSStringFromClass(self));
-    return nil;
+    NSString *tableName = tableNamesByClassName[NSStringFromClass(self)];
+    
+    if ( !tableName )
+    {
+        if ( !tableNamesByClassName ) tableNamesByClassName = [[NSMutableDictionary alloc] init];
+        
+        tableName = [self generateTableName];
+        
+        tableNamesByClassName[NSStringFromClass(self)] = tableName;
+    }
+
+    return tableName;
 }
 
 + (NSDictionary *) columns;
 {
     NSLog(@"PerisistingModel: subclass %@ of FMPersistingModel does not implement +columns.", NSStringFromClass(self));
+    NSLog(@"Use 'po [%@ printColumnTemplate]' in lldb to generate method template (then fill in ? data types).", NSStringFromClass(self));
     return nil;
+}
+
++ (NSArray *) excludedPropertyNames;
+{
+    return @[];
 }
 
 + (NSArray *) excludedColumnNames;
 {
-    return nil;    
+    return nil;
 }
 
 + (NSDictionary *) columnDict;
@@ -133,10 +140,12 @@ static NSDateFormatter *descriptionDateFormatter;
     if ( [ lcString isEqualToString: @"string"] || [ lcString isEqualToString: @"text"] ) return @"text";
     
     if ( [ lcString isEqualToString: @"float"] ||
+         [ lcString isEqualToString: @"numeric"] ||
          [ lcString isEqualToString: @"double"] ||
          [ lcString isEqualToString: @"date"] ) return @"numeric";
     
     if ( [ lcString isEqualToString: @"data"]  ||
+         [ lcString isEqualToString: @"blob"] ||
          [ lcString isEqualToString: @"data nocopy"] ) return @"blob";
     
     return nil;
@@ -591,6 +600,134 @@ static NSDateFormatter *descriptionDateFormatter;
     return [NSNumber numberWithUnsignedLong: updated];
 }
 
++ (NSString *) generateTableName;
+{
+    NSString *className = NSStringFromClass(self);
+    
+    NSMutableString *outString = [[NSMutableString alloc] init];
+    for ( NSUInteger i = 0; i < className.length; i++ )
+    {
+        unichar ch = [className characterAtIndex: i];
+        
+        if ( [[NSCharacterSet uppercaseLetterCharacterSet] characterIsMember: ch] && i > 0 )
+        {
+            [outString appendString: @"_"];
+            [outString appendString: [NSString stringWithCharacters: &ch length:1] ];
+        }
+        else
+        {
+            [outString appendString: [[NSString stringWithCharacters: &ch length:1] uppercaseString]];
+        }
+        
+    }
+    
+    return outString;
+}
+
++ (NSString *)propertyTypeStringOfProperty: (objc_property_t) property
+{
+    const char *attr = property_getAttributes(property);
+    NSString *const attributes = [NSString stringWithCString: attr encoding: NSUTF8StringEncoding];
+    
+    NSRange const typeRangeStart = [attributes rangeOfString:@"T@\""];  // start of type string
+    if (typeRangeStart.location != NSNotFound)
+    {
+        NSString *const typeStringWithQuote = [attributes substringFromIndex:typeRangeStart.location + typeRangeStart.length];
+        NSRange const typeRangeEnd = [typeStringWithQuote rangeOfString:@"\""]; // end of type string
+        if (typeRangeEnd.location != NSNotFound)
+        {
+            NSString *const typeString = [typeStringWithQuote substringToIndex:typeRangeEnd.location];
+            return typeString;
+        }
+    }
+    return nil;
+}
+
++ (NSString *) convertPropertyNameToColumnName: (NSString *) propName;
+{
+    if ( !propName ) return  @"";
+    
+    unichar lastCh = 0;
+    NSMutableString *outString = [[NSMutableString alloc] init];
+    for ( NSUInteger i = 0; i < propName.length; i++ )
+    {
+        unichar ch = [propName characterAtIndex: i];
+        
+        if ( ch == 'D' && lastCh == 'I' )
+        {
+            [outString appendString: [NSString stringWithCharacters: &ch length:1] ];
+        }
+        else if ( [[NSCharacterSet uppercaseLetterCharacterSet] characterIsMember: ch] && i > 0 )
+        {
+            [outString appendString: @"_"];
+            [outString appendString: [NSString stringWithCharacters: &ch length:1] ];
+        }
+        else
+        {
+            [outString appendString: [[NSString stringWithCharacters: &ch length:1] uppercaseString]];
+        }
+        
+        lastCh = ch;
+    }
+    
+    return outString;
+}
+
++ (NSString *) convertPropertyTypeToColumnType: (NSString *) propType;
+{
+    if (!propType) return @"blob";
+    
+    NSString *lcString = [[propType lowercaseString] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    
+    if ( [ lcString isEqualToString: @"nsstring"] ) return @"text";
+    
+    if ( [ lcString isEqualToString: @"nsdata"] ) return @"blob";
+    
+    return @"?"; // see https://www.sqlite.org/datatype3.html
+}
+
++ (NSDictionary *) deriveColumns;
+{
+    NSMutableDictionary *propertyMap = [NSMutableDictionary dictionary];
+    unsigned int outCount, i;
+    objc_property_t *properties = class_copyPropertyList([self class], &outCount);
+    for(i = 0; i < outCount; i++)
+    {
+        objc_property_t property = properties[i];
+        const char *propName = property_getName(property);
+        if (!propName) continue;
+        
+        NSString *propertyName = [NSString stringWithCString:propName encoding:NSUTF8StringEncoding];
+        
+        if ( [self excludedPropertyNames] && [[self excludedPropertyNames] containsObject: propertyName] ) continue;
+        
+        NSString *columnName = [self convertPropertyNameToColumnName: propertyName];
+        NSString *propertyType = [self propertyTypeStringOfProperty:property];
+        NSString *columnType = [self convertPropertyTypeToColumnType: propertyType];
+        propertyMap[columnName] = columnType;
+    }
+    free(properties);
+    return propertyMap;
+}
+
++ (NSString *) printColumnTemplate;
+{
+    NSDictionary *mapping = [self deriveColumns];
+    NSArray *allColumnNames = [mapping allKeys];
+    NSMutableString *output = [[NSMutableString alloc] init];
+    [output appendFormat: @"+ (NSDictionary *) columns {\n    return @{\n"];
+    int cnt = 0;
+    for ( NSString *columnName in allColumnNames )
+    {
+        if ( cnt > 0 ) [output appendString:@",\n"];
+        
+        [output appendFormat: @"        @\"%@\" : @\"%@\"", columnName, mapping[columnName] ];
+        
+        cnt++;
+    }
+    [output appendFormat: @"};\n}\n"];
+    return output;
+}
 
 @end
 
