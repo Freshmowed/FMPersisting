@@ -26,7 +26,7 @@ database column names.
 # Example Class-to-Table mapping:
 <pre><code>
 //////////////  Album.h  //////////////
-#import <Foundation/Foundation.h>
+#import &lt;Foundation/Foundation.h&gt;
 #import "FMPersistingModel.h"
 
 @interface Album : FMPersistingModel
