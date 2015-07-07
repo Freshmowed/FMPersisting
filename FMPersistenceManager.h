@@ -19,6 +19,8 @@
 @property BOOL shouldRaiseExceptions;
 @property BOOL shouldUseMainThread;
 
+- (dispatch_queue_t) serialQueue;
+
 /* optional default instance */
 + (FMPersistenceManager *) sharedInstance;
 + (void) setSharedInstance: (FMPersistenceManager *) psMgr;
@@ -75,7 +77,6 @@
    so instead of myObject.foo = aValue, then persisting value, just all this method to do both.
  */
 - (BOOL) updateValue: (NSObject *) aValue forKey: (NSString *) aKey ofObject: (FMPersistingModel *) anObject;
-- (BOOL) updateValue: (NSObject *) aValue forKey: (NSString *) aKey ofObject: (FMPersistingModel *) anObject obeyThreadRule: (BOOL) obeyThreadRule;
 
 /* CRUD - Delete  methods */
 - (void) deleteObject: (FMPersistingModel *) anObject;
