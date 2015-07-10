@@ -15,7 +15,6 @@ static FMPersistenceManager *_sharedInstance;
 
 @interface FMPersistenceManager ()
 {
-    dispatch_queue_t _serial_queue;
     NSMutableDictionary *insertHandlersByClassName;
     NSMutableDictionary *deleteHandlersByClassName;
     NSMutableDictionary *updateHandlersByClassName;
@@ -47,7 +46,6 @@ static FMPersistenceManager *_sharedInstance;
     self = [super init];
     if (self != nil) 
     {
-        _serial_queue = NULL;
         insertHandlersByClassName = [[NSMutableDictionary alloc] init];
         deleteHandlersByClassName = [[NSMutableDictionary alloc] init];
         updateHandlersByClassName = [[NSMutableDictionary alloc] init];
@@ -55,16 +53,6 @@ static FMPersistenceManager *_sharedInstance;
         self.shouldUseMainThread = YES;
     }
     return self;
-}
-
-- (dispatch_queue_t) serialQueue;
-{
-    if ( _serial_queue == NULL )
-    {
-        _serial_queue = dispatch_queue_create(NULL, DISPATCH_QUEUE_SERIAL);
-    }
-    
-    return  _serial_queue;
 }
 
 - (BOOL) mainThreadCheck;
@@ -172,7 +160,7 @@ static FMPersistenceManager *_sharedInstance;
     if (![self mainThreadCheck])
     {
         NSLog(@"THREAD ISSUE: FMPersistingManager.insertNewObjectOfClass: %@ withValues: %@", NSStringFromClass(aClass), aDict);
-        return nil;
+        // return nil;
     }
     
     NSDictionary *insertInfo = [aClass insertStatementWithValues: aDict]; 
@@ -274,7 +262,7 @@ static FMPersistenceManager *_sharedInstance;
     if (![self mainThreadCheck])
     {
         NSLog(@"THREAD ISSUE: FMPersistingManager.saveObject: %@", NSStringFromClass([anObject class]));
-        return NO;
+        // return NO;
     }
 
     return [ self updateColumns: nil ofObject: anObject];
@@ -303,7 +291,7 @@ static FMPersistenceManager *_sharedInstance;
     if (![self mainThreadCheck])
     {
         NSLog(@"THREAD ISSUE: FMPersistingManager.updateValue...Class: %@ forKey: %@", NSStringFromClass([anObject class]), aKey);
-        return NO;
+        // return NO;
     }
     
     [anObject setValue: aValue forKey: aKey];
@@ -406,7 +394,7 @@ static FMPersistenceManager *_sharedInstance;
     if (![self mainThreadCheck])
     {
         NSLog(@"THREAD ISSUE: FMPersistingManager.updateColumns %@ OfClass: %@", columnNames, NSStringFromClass([anObject class]));
-        return NO;
+        // return NO;
     }
 
     NSDictionary *updateInfo = [anObject updateStatementForColumns: columnNames ];
@@ -618,7 +606,7 @@ static FMPersistenceManager *_sharedInstance;
     if (![self mainThreadCheck])
     {
         NSLog(@"THREAD ISSUE: FMPersistingManager.deleteObject: %@", NSStringFromClass([anObject class]));
-        return;
+        // return;
     }
 
     NSString *primaryKeyKey = [[anObject class] primaryKeyKey];
@@ -653,7 +641,7 @@ static FMPersistenceManager *_sharedInstance;
     if (![self mainThreadCheck])
     {
         NSLog(@"THREAD ISSUE: FMPersistingManager.deleteAllObjectsOfClass: %@", NSStringFromClass(aClass));
-        return;
+        // return;
     }
 
     [self.database executeUpdate: deleteString ];

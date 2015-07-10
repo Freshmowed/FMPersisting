@@ -19,8 +19,6 @@
 @property BOOL shouldRaiseExceptions;
 @property BOOL shouldUseMainThread;
 
-- (dispatch_queue_t) serialQueue;
-
 /* optional default instance */
 + (FMPersistenceManager *) sharedInstance;
 + (void) setSharedInstance: (FMPersistenceManager *) psMgr;
