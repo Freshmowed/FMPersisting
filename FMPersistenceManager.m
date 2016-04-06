@@ -12,6 +12,7 @@
 #import "FMResultSet.h"
 
 static FMPersistenceManager *_sharedInstance;
+static NSMutableDictionary *persistencManagersByIdentifier;
 
 @interface FMPersistenceManager ()
 {
@@ -29,6 +30,7 @@ static FMPersistenceManager *_sharedInstance;
 +(void)initialize
 {
     _sharedInstance = nil;
+    persistencManagersByIdentifier = [[NSMutableDictionary alloc] init];
 }
 
 + (FMPersistenceManager *) sharedInstance;
@@ -41,27 +43,54 @@ static FMPersistenceManager *_sharedInstance;
     _sharedInstance = psMgr;
 }
 
-- (id) init
++ (FMPersistenceManager *) managerWithIdentifier: (NSString *) identifier;
 {
-    self = [super init];
-    if (self != nil) 
+    if (!identifier) return nil;
+    
+    return persistencManagersByIdentifier[identifier];
+}
+
+- (id) initWithIdentifier: (NSString *) identifier;
+{
+    if (identifier)
     {
+        FMPersistenceManager *existing = persistencManagersByIdentifier[identifier];
+        if (existing) {
+            // NSLog(@"FMPersistenceManager.initWithIdentifier: instance already exists for identifier: %@", identifier);
+            self = existing;
+            return self;
+        }
+    }
+    
+    self = [super init];
+    if (self != nil)
+    {
+        if (identifier ) persistencManagersByIdentifier[identifier] = self;
+        
+        _serialQueue = nil;
         insertHandlersByClassName = [[NSMutableDictionary alloc] init];
         deleteHandlersByClassName = [[NSMutableDictionary alloc] init];
         updateHandlersByClassName = [[NSMutableDictionary alloc] init];
         self.shouldRaiseExceptions = NO;
-        self.shouldUseMainThread = YES;
     }
+    
     return self;
+}
+
+- (id) init
+{
+    return [self initWithIdentifier: nil];
 }
 
 - (BOOL) mainThreadCheck;
 {
     BOOL onMainThread = [[NSThread currentThread] isMainThread];
-    if ( onMainThread != _shouldUseMainThread )
-    {
+    
+    if ( onMainThread && _serialQueue )
         return NO;
-    }
+    
+    if ( !onMainThread && !_serialQueue )
+        return NO;
     
     return YES;
 }
@@ -92,7 +121,7 @@ static FMPersistenceManager *_sharedInstance;
     {
         return [columnNames containsObject: columnName];
     }
-
+    
     columnNames = [[NSMutableArray alloc] init];
     columnNamesByTableName[tableName] = columnNames;
     
@@ -121,17 +150,16 @@ static FMPersistenceManager *_sharedInstance;
 - (FMDatabase *) openDatabaseWithPath: (NSString *) aPath;
 {
     FMDatabase *aDB = [FMDatabase databaseWithPath: aPath];
-    if (![aDB open]) 
+    if (![aDB open])
     {
         NSLog(@"Could not open db %@", aPath);
         return nil;
     }
     
-    self.shouldUseMainThread = YES;
     self.database = aDB;
     self.databasePath = aPath;
     [aDB setShouldCacheStatements: YES];
-
+    
     return aDB;
 }
 
@@ -141,7 +169,7 @@ static FMPersistenceManager *_sharedInstance;
 }
 
 - (NSError *) deleteDatabase;
-{    
+{
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSError *anError = nil;
     [fileManager removeItemAtPath:self.databasePath error:&anError];
@@ -149,25 +177,34 @@ static FMPersistenceManager *_sharedInstance;
     return anError;
 }
 
+- (void) dropTableForClass: (Class) aClass;
+{
+    if ( [aClass isMemberOfClass: [FMPersistingModel class]] )
+    {
+        NSLog(@"Error: PersistenceManager dropTableForClass:... must be provided a FMPersistingModel subclass.");
+        return;
+    }
+    
+    NSLog(@"FMPersistenceManager: Dropping table %@!!!", [aClass tableName] );
+    NSString *dropString = [[NSString alloc] initWithFormat:@"drop table if exists %@", [aClass tableName]];
+    [_database executeUpdate: dropString ];
+}
+
 - (FMPersistingModel *) insertNewObjectOfClass: (Class) aClass withValues: (NSDictionary *) aDict;
 {
-    if ( [aClass isMemberOfClass: [FMPersistingModel class]] ) 
+    if ( [aClass isMemberOfClass: [FMPersistingModel class]] )
     {
         NSLog(@"Error: PersistenceManager insertNewObjectOfClass:... must be provided a FMPersistingModel subclass.");
         return nil;
     }
     
-    if (![self mainThreadCheck])
-    {
-        NSLog(@"THREAD ISSUE: FMPersistingManager.insertNewObjectOfClass: %@ withValues: %@", NSStringFromClass(aClass), aDict);
-        // return nil;
-    }
-    
-    NSDictionary *insertInfo = [aClass insertStatementWithValues: aDict]; 
+    NSDictionary *insertInfo = [aClass insertStatementWithValues: aDict];
     NSString *insertString = [insertInfo objectForKey:@"statement"];
     NSArray *values = [insertInfo objectForKey:@"valueArray"];
-    NSString *stmt = [[aClass baseQueryString] stringByAppendingString:@" where ID = last_insert_rowid()"];
-
+    NSString *primaryKeyKey = [aClass primaryKeyKey];
+    
+    NSString *stmt = [[aClass baseQueryString] stringByAppendingString:[NSString stringWithFormat:@" where %@ = last_insert_rowid()", primaryKeyKey]];
+    
     FMPersistingModel *newObject = nil;
     BOOL hadInsertError = NO;
     BOOL hadFetchError = NO;
@@ -175,22 +212,23 @@ static FMPersistenceManager *_sharedInstance;
     FMDatabase *db = self.database;
     [db executeUpdate: insertString withArgumentsInArray: values];
     
-    if ([self.database hadError]) 
+    if ([self.database hadError])
     {
         hadInsertError = YES;
         int lastErrorCode = [self.database lastErrorCode];
         NSLog(@"fmdb error code %d: %@", lastErrorCode, [self.database lastErrorMessage]);
         return nil;
-    }        
+    }
     
     if ( [aClass primaryKeyAutoGenerated ] )
     {
-        NSString *queryStmt = [[aClass baseQueryString] stringByAppendingString:@" where ID = ?"];
+        NSString *queryStmt = [[aClass baseQueryString] stringByAppendingString:[NSString stringWithFormat:@" where %@ = ?", primaryKeyKey]];
         FMResultSet *rs = [self.database executeQuery: queryStmt withArgumentsInArray: @[[NSNumber numberWithLongLong: [db lastInsertRowId]]] ];
         
         if ([rs next])
         {
             newObject = [aClass objectFromResultSet: rs];
+            newObject.persistenceManager = self;
         }
         
         [rs close];
@@ -200,7 +238,7 @@ static FMPersistenceManager *_sharedInstance;
             hadFetchError = YES;
         }
     }
-
+    
     NSString *className = NSStringFromClass(aClass);
     if ( hadInsertError )
     {
@@ -225,46 +263,41 @@ static FMPersistenceManager *_sharedInstance;
 
 - (FMPersistingModel *) lastInsertedObjectOfClass: (Class) aClass;
 {
-    if ( [aClass isMemberOfClass: [FMPersistingModel class]] ) 
+    if ( [aClass isMemberOfClass: [FMPersistingModel class]] )
     {
         NSLog(@"Error: PersistenceManager lastInsertedObjectOfClass: must be provided a FMPersistingModel subclass.");
         return nil;
     }
-
+    
     FMPersistingModel *newObject = nil;
-
+    
     FMDatabase *db = self.database;
-    NSString *stmt = [[aClass baseQueryString] stringByAppendingString:@" where ID = last_insert_rowid()"];
+    NSString *stmt = [[aClass baseQueryString] stringByAppendingString:[NSString stringWithFormat:@" where %@ = last_insert_rowid()", [aClass primaryKeyKey]]];
     FMResultSet *rs = [self.database executeQuery: stmt ];
     
     if ([rs next])
     {
         newObject = [aClass objectFromResultSet: rs];
+        newObject.persistenceManager = self;
     }
     
     [rs close];
     
     if ([db hadError])
     {
-        NSString *errorDescrip = [NSString stringWithFormat: @"Error retrieving last object for class: %@ using statement: %@", 
+        NSString *errorDescrip = [NSString stringWithFormat: @"Error retrieving last object for class: %@ using statement: %@",
                                   NSStringFromClass(aClass), stmt];
         [self handleError: errorDescrip context: nil];
         return nil;
-    }        
+    }
     
     if ( !newObject ) NSLog(@"PersistenceManager: failed to find last inserted object of class %@", NSStringFromClass(aClass));
-        
+    
     return newObject;
 }
 
 - (BOOL) saveObject: (FMPersistingModel *) anObject;
 {
-    if (![self mainThreadCheck])
-    {
-        NSLog(@"THREAD ISSUE: FMPersistingManager.saveObject: %@", NSStringFromClass([anObject class]));
-        // return NO;
-    }
-
     return [ self updateColumns: nil ofObject: anObject];
 }
 
@@ -275,23 +308,17 @@ static FMPersistenceManager *_sharedInstance;
         NSLog(@"No parameters for updateValue:forKey:ofObject:");
         return NO;
     }
-
+    
     if ( !aValue )
     {
         NSLog(@"No value for updateValue:forKey: %@ ofObject: %@", aKey, [anObject class]);
         return NO;
     }
-
+    
     if ( !anObject )
     {
         NSLog(@"No object for updateValue:forKey: %@ ofObject:", aKey);
         return NO;
-    }
-
-    if (![self mainThreadCheck])
-    {
-        NSLog(@"THREAD ISSUE: FMPersistingManager.updateValue...Class: %@ forKey: %@", NSStringFromClass([anObject class]), aKey);
-        // return NO;
     }
     
     [anObject setValue: aValue forKey: aKey];
@@ -315,29 +342,29 @@ static FMPersistenceManager *_sharedInstance;
 }
 
 /*
-- (void) updateKeyValueObjectDict: (NSDictionary *) dict;
-{
-    FMPersistingModel *anObject = dict[@"object"];
-    NSString *aKey = dict[@"key"];
-    NSObject *aValue = dict[@"value"];
-    
-    if ( !aKey || !aValue )
-    {
-        NSLog(@"PersistenceManager.updateKeyValueObjectDict: no key and/or value");
-        return;
-    }
-    
-    [anObject setValue: aValue forKey: aKey];
-    
-    [self updateColumns: [NSArray arrayWithObject: [[anObject class] columnNameForKey: aKey]]
-                                         ofObject: anObject ];
-    
-    NSDictionary *handlers = [updateHandlersByClassName objectForKey: NSStringFromClass([anObject class])];
-    void (^handler)() = [handlers objectForKey: aKey];
-    if ( handler ) handler();
-    
-}
-*/
+ - (void) updateKeyValueObjectDict: (NSDictionary *) dict;
+ {
+ FMPersistingModel *anObject = dict[@"object"];
+ NSString *aKey = dict[@"key"];
+ NSObject *aValue = dict[@"value"];
+ 
+ if ( !aKey || !aValue )
+ {
+ NSLog(@"PersistenceManager.updateKeyValueObjectDict: no key and/or value");
+ return;
+ }
+ 
+ [anObject setValue: aValue forKey: aKey];
+ 
+ [self updateColumns: [NSArray arrayWithObject: [[anObject class] columnNameForKey: aKey]]
+ ofObject: anObject ];
+ 
+ NSDictionary *handlers = [updateHandlersByClassName objectForKey: NSStringFromClass([anObject class])];
+ void (^handler)() = [handlers objectForKey: aKey];
+ if ( handler ) handler();
+ 
+ }
+ */
 
 - (void)addInsertHandler:(void (^)())aHandler forClassName: (NSString *) className;
 {
@@ -362,7 +389,7 @@ static FMPersistenceManager *_sharedInstance;
     if ( !aKey || !aHandler || !className) return;
     
     void (^handlerCopy)() = [aHandler copy];
-
+    
     NSMutableDictionary *handlers = [updateHandlersByClassName objectForKey: aKey];
     if ( !handlers )
     {
@@ -385,18 +412,12 @@ static FMPersistenceManager *_sharedInstance;
 {
     if ( !anObject ) return NO;
     
-    if ( [[anObject class] isMemberOfClass: [FMPersistingModel class]] ) 
+    if ( [[anObject class] isMemberOfClass: [FMPersistingModel class]] )
     {
         NSLog(@"Error: PersistenceManager update methods must be provided a FMPersistingModel subclass.");
         return NO;
     }
     
-    if (![self mainThreadCheck])
-    {
-        NSLog(@"THREAD ISSUE: FMPersistingManager.updateColumns %@ OfClass: %@", columnNames, NSStringFromClass([anObject class]));
-        // return NO;
-    }
-
     NSDictionary *updateInfo = [anObject updateStatementForColumns: columnNames ];
     NSString *sqlString = [updateInfo objectForKey:@"statement"];
     NSArray *values = [updateInfo objectForKey:@"valueArray"];
@@ -405,7 +426,7 @@ static FMPersistenceManager *_sharedInstance;
     
     if ([self.database hadError] && [self.database lastErrorCode] != 0 )
     {
-        NSString *errorDescrip = [NSString stringWithFormat: @"Error updating object for class: %@ using statement: %@", 
+        NSString *errorDescrip = [NSString stringWithFormat: @"Error updating object for class: %@ using statement: %@",
                                   NSStringFromClass([anObject class]), sqlString];
         [self handleError: errorDescrip context: nil];
         return NO;
@@ -421,38 +442,38 @@ static FMPersistenceManager *_sharedInstance;
 - (NSArray *) objectsOfClass: (Class) aClass fromResultSet: (FMResultSet *) rs;
 {
     NSMutableArray *objects = [NSMutableArray array];
-    while ([rs next]) 
+    while ([rs next])
     {
-        [objects addObject: [aClass objectFromResultSet: rs]];
+        FMPersistingModel *modelObject = [aClass objectFromResultSet: rs];
+        if (modelObject)
+        {
+            modelObject.persistenceManager = self;
+            [objects addObject: modelObject];
+        }
     }
     [rs close];
     
-    if ([self.database hadError]) 
+    if ([self.database hadError])
     {
         [self handleError: [NSString stringWithFormat: @"Error creating objects of type %@ from result set", NSStringFromClass(aClass) ] context: nil];
         return nil;
-    }        
+    }
     
     return objects;
 }
 
 - (NSArray *) fetchAllObjectsOfClass: (Class) aClass;
 {
-    if ( [aClass isMemberOfClass: [FMPersistingModel class]] ) 
+    if ( [aClass isMemberOfClass: [FMPersistingModel class]] )
     {
         NSLog(@"Error: PersistenceManager fetchAllObjectsOfClass: must be provided a FMPersistingModel subclass.");
         return nil;
     }
     
-    if (![self mainThreadCheck])
-    {
-        NSLog(@"THREAD ISSUE: FMPersistingManager.fetchAllObjectsOfClass: %@", NSStringFromClass(aClass));
-    }
-
     NSArray *objects = nil;
     
     FMResultSet *rs = [self.database executeQuery: [aClass baseQueryString] ];
-
+    
     objects = [self objectsOfClass: aClass fromResultSet: rs];
     [rs close];
     
@@ -472,13 +493,13 @@ static FMPersistenceManager *_sharedInstance;
 {
     if ( !anID) return nil;
     
-    return [self fetchObjectOfClass: aClass 
-                       withCriteria: [NSDictionary dictionaryWithObject: anID forKey:@"ID"]];
+    return [self fetchObjectOfClass: aClass
+                       withCriteria: @{@"ID" : anID}];
 }
 
 - (FMPersistingModel *) fetchObjectOfClass: (Class) aClass withWhereClause: (NSString *) whereClause;
 {
-    NSArray *allObjects = [ self fetchObjectsOfClass: aClass 
+    NSArray *allObjects = [ self fetchObjectsOfClass: aClass
                                      withWhereClause: whereClause
                                           sortClause: nil ];
     
@@ -491,7 +512,7 @@ static FMPersistenceManager *_sharedInstance;
 {
     if ( !aDict || [aDict count] == 0 ) return nil;
     
-    if ( [aClass isMemberOfClass: [FMPersistingModel class]] ) 
+    if ( [aClass isMemberOfClass: [FMPersistingModel class]] )
     {
         NSLog(@"Error: PersistenceManager fetchObjectsOfClass:... must be provided a FMPersistingModel subclass.");
         return nil;
@@ -520,22 +541,21 @@ static FMPersistenceManager *_sharedInstance;
         [stmt appendFormat: @"%@ %@ ?", [aClass columnNameForKey: columnKey], (negate ? @"!=" : @"=")];
     }
     
-
-    if (![self mainThreadCheck])
-    {
-        NSLog(@"THREAD ISSUE: FMPersistingManager.fetchObjectsOfClass: %@ with generated SQL: %@", NSStringFromClass(aClass), stmt);
-    }
-    
     NSMutableArray *result = [NSMutableArray array];
     
     FMDatabase *db = self.database; // instead of block
     FMResultSet *rs = [db executeQuery: stmt withArgumentsInArray: whereValues];
     while ([rs next])
     {
-        [result addObject: [aClass objectFromResultSet: rs]];
+        FMPersistingModel *modelObject = [aClass objectFromResultSet: rs];
+        if (modelObject)
+        {
+            modelObject.persistenceManager = self;
+            [result addObject: modelObject];
+        }
     }
     [rs close];
-
+    
     if ([db hadError])
     {
         NSString *errorDescrip = [NSString stringWithFormat: @"Error fetching object of class %@ with criteria.", NSStringFromClass(aClass)];
@@ -545,17 +565,17 @@ static FMPersistenceManager *_sharedInstance;
     return result;
 }
 
-- (NSArray *) fetchObjectsOfClass: (Class) aClass 
+- (NSArray *) fetchObjectsOfClass: (Class) aClass
                   withWhereClause: (NSString *) whereClause;
 {
     return [self fetchObjectsOfClass: aClass withWhereClause: whereClause sortClause: nil];
 }
 
-- (NSArray *) fetchObjectsOfClass: (Class) aClass 
+- (NSArray *) fetchObjectsOfClass: (Class) aClass
                   withWhereClause: (NSString *) whereClause
                        sortClause: (NSString *) sortClause;
 {
-    if ( [aClass isMemberOfClass: [FMPersistingModel class]] ) 
+    if ( [aClass isMemberOfClass: [FMPersistingModel class]] )
     {
         NSLog(@"Error: PersistenceManager fetchObjectsOfClass:... must be provided a FMPersistingModel subclass.");
         return nil;
@@ -566,25 +586,25 @@ static FMPersistenceManager *_sharedInstance;
     if ( whereClause && [whereClause length] > 0 ) [stmt appendFormat: @" where %@", whereClause];
     if ( sortClause && [sortClause length] > 0 ) [stmt appendFormat: @" order by %@", sortClause];
     
-    if (![self mainThreadCheck])
-    {
-        NSLog(@"THREAD ISSUE: FMPersistingManager.fetchObjectsOfClass: %@ with explicit SQL: %@", NSStringFromClass(aClass), stmt);
-    }
-
     NSMutableArray *result = [NSMutableArray array];
     FMDatabase *db = self.database;
-     FMResultSet *rs = [db executeQuery: stmt];
-     while ([rs next])
-     {
-         [result addObject: [aClass objectFromResultSet: rs]];
-     }
-     [rs close];
-     
-     if ([db hadError])
-     {
-         NSString *errorDescrip = [NSString stringWithFormat: @"Error fetching object of class %@ with criteria.", NSStringFromClass(aClass)];
-         [self handleError: errorDescrip context: nil];
-     }
+    FMResultSet *rs = [db executeQuery: stmt];
+    while ([rs next])
+    {
+        FMPersistingModel *modelObject = [aClass objectFromResultSet: rs];
+        if (modelObject)
+        {
+            modelObject.persistenceManager = self;
+            [result addObject: modelObject];
+        }
+    }
+    [rs close];
+    
+    if ([db hadError])
+    {
+        NSString *errorDescrip = [NSString stringWithFormat: @"Error fetching object of class %@ with criteria.", NSStringFromClass(aClass)];
+        [self handleError: errorDescrip context: nil];
+    }
     
     return result;
 }
@@ -597,22 +617,18 @@ static FMPersistenceManager *_sharedInstance;
         return;
     }
     
-   if ( [[anObject class] isMemberOfClass: [FMPersistingModel class]] )
+    if ( [[anObject class] isMemberOfClass: [FMPersistingModel class]] )
     {
         NSLog(@"Error: attempt to delete object of FMPersistingModel class (must be subclass).");
         return;
     }
     
-    if (![self mainThreadCheck])
-    {
-        NSLog(@"THREAD ISSUE: FMPersistingManager.deleteObject: %@", NSStringFromClass([anObject class]));
-        // return;
-    }
-
+    anObject.persistenceManager = nil;
+    
     NSString *primaryKeyKey = [[anObject class] primaryKeyKey];
     NSString *deleteString = [[NSString alloc] initWithFormat:@"delete from %@ where %@ = ?", [[anObject class] tableName], primaryKeyKey];
     
-    [self.database executeUpdate: deleteString withArgumentsInArray: @[ [anObject ID] ] ];
+    [self.database executeUpdate: deleteString withArgumentsInArray: @[ [anObject primaryKeyValue] ] ];
     
     NSString *className = NSStringFromClass([anObject class]);
     if ([self.database hadError])
@@ -630,7 +646,7 @@ static FMPersistenceManager *_sharedInstance;
 
 -(void) deleteAllObjectsOfClass: (Class) aClass;
 {
-    if ( [aClass isMemberOfClass: [FMPersistingModel class]] ) 
+    if ( [aClass isMemberOfClass: [FMPersistingModel class]] )
     {
         NSLog(@"Error: attempt to delete object of FMPersistingModel class (must be subclass).");
         return;
@@ -638,19 +654,13 @@ static FMPersistenceManager *_sharedInstance;
     
     NSString *deleteString = [[NSString alloc] initWithFormat:@"delete from %@", [aClass tableName]];
     
-    if (![self mainThreadCheck])
-    {
-        NSLog(@"THREAD ISSUE: FMPersistingManager.deleteAllObjectsOfClass: %@", NSStringFromClass(aClass));
-        // return;
-    }
-
     [self.database executeUpdate: deleteString ];
     
-    if ([self.database hadError]) 
+    if ([self.database hadError])
     {
         NSString *errorDescrip = [@"Error deleting all objects of class " stringByAppendingString:NSStringFromClass(aClass)];
         [self handleError: errorDescrip context: deleteString];
-    }        
+    }
     else
     {
         void (^handler)() = [deleteHandlersByClassName objectForKey: NSStringFromClass(aClass)];
@@ -662,15 +672,15 @@ static FMPersistenceManager *_sharedInstance;
 - (void) handleError: (NSString *) errorDescrip context: (NSString *) contextDescrip;
 {
     if ( !errorDescrip ) errorDescrip = @"Unspecified Error";
-
+    
     NSLog(@"Error during %@ fmdb code: %d (%@)", errorDescrip, [self.database lastErrorCode], [self.database lastErrorMessage]);
-
+    
     if ( [self shouldRaiseExceptions] )
     {
         
         NSDictionary *errDict = [[self class] errorDictionaryForErrorInFmdb: self.database
-                                                    duringOperation:errorDescrip
-                                                            context:contextDescrip];
+                                                            duringOperation:errorDescrip
+                                                                    context:contextDescrip];
         
         [[ NSException exceptionWithName: errorDescrip
                                   reason: contextDescrip
@@ -704,7 +714,7 @@ static FMPersistenceManager *_sharedInstance;
 /* TODO: write more robust tests. */
 + (void) runTestsWithClass: (Class) aClass;
 {
-    if ( [aClass isMemberOfClass: [FMPersistingModel class]] ) 
+    if ( [aClass isMemberOfClass: [FMPersistingModel class]] )
     {
         NSLog(@"Error: attempt to delete object of FMPersistingModel class (must be subclass).");
         return;
@@ -723,17 +733,17 @@ static FMPersistenceManager *_sharedInstance;
     else
         NSLog(@"TEST: Success: newly inserted object: %@", anObject);
     
-    NSObject *fetchedObject = [aMgr fetchObjectOfClass: aClass withID: (NSNumber *) [anObject ID] ];
-
+    NSObject *fetchedObject = [aMgr fetchObjectOfClass: aClass withID: (NSNumber *) [anObject primaryKeyValue] ];
+    
     if ( !fetchedObject )
         NSLog(@"TEST: Fail: could not fetch object of class %@", NSStringFromClass(aClass));
     else
-        NSLog(@"TEST: Success: fetch object by ID: %@ %@ same object", fetchedObject, (anObject == fetchedObject ? @"is" : @"is not" ));
-
+        NSLog(@"TEST: Success: fetch object by primary key value: %@ %@ same object", fetchedObject, (anObject == fetchedObject ? @"is" : @"is not" ));
+    
     [aMgr insertNewObjectOfClass: aClass withValues: [NSDictionary dictionaryWithObjectsAndKeys:@"Node5678", @"name", @"windowsLaptop", @"type", nil]]; //! assuming Node class
     
     NSObject *insertedObject = [aMgr lastInsertedObjectOfClass:aClass];
-
+    
     if ( !insertedObject )
         NSLog(@"TEST: Fail: could not fetch last inserted object of class %@", NSStringFromClass(aClass));
     else
@@ -757,7 +767,7 @@ static FMPersistenceManager *_sharedInstance;
     {
         NSLog(@"TEST: Success: object deleted. ");
     }
- }
+}
 
 
 @end
